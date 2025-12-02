@@ -1,0 +1,140 @@
+package com.cantinho_emocoes.service;
+
+// --- IMPORTS CORRIGIDOS ---
+import com.cantinho_emocoes.dto.DependenteRequestDTO;
+import com.cantinho_emocoes.dto.PerfilDTO;
+import com.cantinho_emocoes.model.Perfil; // Importante para Perfil.CRIANCA funcionar
+import com.cantinho_emocoes.model.Usuario;
+import com.cantinho_emocoes.repository.UsuarioRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
+public class UsuarioService {
+
+    private final UsuarioRepository usuarioRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final GmailEmailService emailService;
+    
+    @Value("${app.frontend.url}")
+    private String frontendBaseUrl;
+
+    public UsuarioService(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder, GmailEmailService emailService) {
+        this.usuarioRepository = usuarioRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
+    }
+
+    @Transactional(readOnly = true)
+    public PerfilDTO getPerfilDoUsuario(String email) {
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
+
+        return new PerfilDTO(
+            usuario.getNome(),
+            usuario.getEmail(),
+            usuario.getAvatarUrl(),
+            1, // Nivel fictício
+            0, // XP fictício
+            100,
+            Collections.emptySet()
+        );
+    }
+
+    // --- GESTÃO DE DEPENDENTES ---
+
+    @Transactional
+    public Usuario criarDependente(Usuario responsavel, DependenteRequestDTO dto) {
+        Usuario crianca = new Usuario();
+        crianca.setNome(dto.nome());
+        
+        // Gera senha aleatória pois a criança usa o login do pai
+        crianca.setSenha(passwordEncoder.encode(UUID.randomUUID().toString())); 
+        
+        // AQUI ESTAVA O ERRO: Agora o Perfil.CRIANCA vai funcionar
+        crianca.setPerfil(Perfil.CRIANCA);
+        
+        crianca.setAvatarUrl(dto.avatarUrl());
+        crianca.setDataNascimento(dto.dataNascimento());
+        crianca.setResponsavel(responsavel);
+        crianca.setDataCadastro(LocalDate.now());
+
+        return usuarioRepository.save(crianca);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Usuario> listarDependentes(Usuario responsavel) {
+        return responsavel.getDependentes();
+    }
+    
+    public boolean validarPin(Usuario usuario, String pinDigitado) {
+        if (usuario.getPin() == null) return false;
+        return passwordEncoder.matches(pinDigitado, usuario.getPin());
+    }
+
+    // --- RECUPERAÇÃO DE SENHA ---
+
+    @Transactional
+    public void requestPasswordReset(String email) {
+        Optional<Usuario> usuarioOptional = usuarioRepository.findByEmail(email);
+        if (usuarioOptional.isPresent()) {
+            Usuario usuario = usuarioOptional.get();
+            String token = UUID.randomUUID().toString();
+            usuario.setResetToken(token);
+            usuario.setResetTokenExpiresAt(LocalDateTime.now().plusHours(1));
+            usuarioRepository.save(usuario);
+
+            String resetLink = frontendBaseUrl + "/resetar-senha?token=" + token;
+            emailService.sendPasswordResetEmail(usuario.getEmail(), usuario.getNome(), resetLink);
+        }
+    }
+
+    @Transactional
+    public void resetPassword(String token, String newPassword) {
+        Usuario usuario = usuarioRepository.findByResetToken(token)
+            .orElseThrow(() -> new RuntimeException("Token inválido."));
+            
+        if (usuario.getResetTokenExpiresAt().isBefore(LocalDateTime.now())) {
+             throw new RuntimeException("Token expirado.");
+        }
+
+        usuario.setSenha(passwordEncoder.encode(newPassword));
+        usuario.setResetToken(null);
+        usuario.setResetTokenExpiresAt(null);
+        usuarioRepository.save(usuario);
+    }
+    
+    @Transactional
+    public void atualizarNome(String email, String novoNome) {
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
+        
+        usuario.setNome(novoNome);
+        usuarioRepository.save(usuario);
+    }
+    @Transactional
+    public void excluirContaFamilia(Usuario responsavel) {
+        // O CascadeType.ALL na entidade Usuario garante que ao deletar o pai,
+        // todos os filhos (dependentes) e dados vinculados sejam apagados.
+        usuarioRepository.delete(responsavel);
+    }
+    @Transactional
+    public void excluirContaFamilia(String email) {
+        Usuario responsavel = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
+        
+        // O JPA vai cuidar de apagar os filhos se a entidade estiver configurada certa (Passo 3)
+        usuarioRepository.delete(responsavel);
+    }
+
+}
