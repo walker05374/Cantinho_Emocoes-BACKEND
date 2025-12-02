@@ -8,11 +8,11 @@
 		<version>3.5.3</version>
 		<relativePath/> 
 	</parent>
-	<groupId>com.sistema_estudante</groupId>
-	<artifactId>sistema_estudante</artifactId>
+	<groupId>com.cantinho_emocoes</groupId>
+	<artifactId>cantinho_emocoes</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>sistema_estudante</name>
-	<description>sistema-estudante</description>
+	<name>Cantinho das Emoções</name>
+	<description>Backend para o projeto Cantinho das Emoções</description>
 	<url/>
 	<licenses>
 		<license/>
