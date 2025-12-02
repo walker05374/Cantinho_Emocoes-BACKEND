@@ -38,7 +38,7 @@ public class DiarioController {
         return ResponseEntity.ok(diarios);
     }
 
-    // SALVAR TEXTO/EMOÇÃO
+    // SALVAR TEXTO/EMOÇÃO (Diário Comum)
     @PostMapping
     public ResponseEntity<?> salvarDiario(
             @RequestHeader("x-child-id") Long childId,
@@ -51,6 +51,12 @@ public class DiarioController {
         diario.setEmocao((String) payload.get("emocao"));
         diario.setIntensidade((Integer) payload.get("intensidade"));
         diario.setRelato((String) payload.get("relato"));
+        
+        // Verifica se veio um desenho junto com o texto (opcional)
+        if (payload.containsKey("desenhoBase64")) {
+            diario.setDesenhoBase64((String) payload.get("desenhoBase64"));
+        }
+
         diario.setDataRegistro(LocalDateTime.now());
         diario.setDependente(crianca);
 
@@ -59,7 +65,7 @@ public class DiarioController {
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Diário salvo com sucesso!"));
     }
 
-    // --- CORREÇÃO AQUI: SALVAR DESENHO ---
+    // SALVAR DESENHO (Modo Galeria/Arte)
     @PostMapping("/desenho")
     public ResponseEntity<?> salvarDesenho(
             @RequestHeader("x-child-id") Long childId,
@@ -70,18 +76,13 @@ public class DiarioController {
 
         String imagemBase64 = payload.get("imagem");
 
-        // Cria SEMPRE um novo registro para garantir que múltiplos desenhos no mesmo dia sejam salvos
         Diario novoDiario = new Diario();
         
-        // Define como atividade criativa (neutra, não conta como Triste/Feliz no gráfico se filtrado)
+        // Define como 'CRIATIVO' para podermos filtrar no dashboard e não quebrar o gráfico de emoções
         novoDiario.setEmocao("CRIATIVO"); 
         
-        // Intensidade apenas para registro
         novoDiario.setIntensidade(5); 
-        
-        // Relato simples e bonito, sem avisos estranhos
-        novoDiario.setRelato("Um lindo desenho!"); 
-        
+        novoDiario.setRelato("Atividade de Desenho"); 
         novoDiario.setDesenhoBase64(imagemBase64);
         novoDiario.setDataRegistro(LocalDateTime.now());
         novoDiario.setDependente(crianca);

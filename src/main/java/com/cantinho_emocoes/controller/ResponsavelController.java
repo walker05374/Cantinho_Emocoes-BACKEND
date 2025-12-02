@@ -3,6 +3,7 @@ package com.cantinho_emocoes.controller;
 import com.cantinho_emocoes.dto.*;
 import com.cantinho_emocoes.model.*;
 import com.cantinho_emocoes.repository.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -74,12 +75,21 @@ public class ResponsavelController {
     }
 
     // 3. Validar PIN
+    // CORREÇÃO: Retorna 200 OK com "valid: false" em vez de 403 Forbidden para não derrubar a sessão no frontend.
     @PostMapping("/validar-pin")
     public ResponseEntity<?> validarPin(@RequestBody Map<String, String> payload, @AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(Map.of("valid", true));
+        Usuario pai = getUsuario(userDetails.getUsername());
+        String pinDigitado = payload.get("pin");
+
+        if (pai.getPin() != null && passwordEncoder.matches(pinDigitado, pai.getPin())) {
+            return ResponseEntity.ok(Map.of("valid", true));
+        }
+        
+        // Alterado de status(403) para ok() para evitar o logout automático
+        return ResponseEntity.ok(Map.of("valid", false, "error", "PIN incorreto."));
     }
 
-    // 4. Dados para o Dashboard (CORRIGIDO AQUI)
+    // 4. Dados para o Dashboard
     @GetMapping("/dependentes/{id}/dashboard")
     public ResponseEntity<?> getDadosGrafico(@PathVariable Long id, @AuthenticationPrincipal UserDetails userDetails) {
         Usuario pai = getUsuario(userDetails.getUsername());
@@ -93,21 +103,22 @@ public class ResponsavelController {
 
         List<Diario> diarios = diarioRepository.findByDependenteIdOrderByDataRegistroDesc(id);
 
-        // --- CORREÇÃO 1: Adicionado d.getDesenhoBase64() ---
+        // Filtra desenhos (CRIATIVO) para não quebrar o gráfico de emoções
         List<DiarioDTO> historicoGrafico = diarios.stream()
-                .limit(10)
+                .filter(d -> !"CRIATIVO".equalsIgnoreCase(d.getEmocao())) 
+                .limit(20)
                 .sorted((d1, d2) -> d1.getDataRegistro().compareTo(d2.getDataRegistro()))
                 .map(d -> new DiarioDTO(
                     d.getId(), 
                     d.getEmocao(), 
                     d.getIntensidade(), 
                     d.getRelato(), 
-                    d.getDesenhoBase64(), // <--- ADICIONADO AQUI
+                    d.getDesenhoBase64(),
                     d.getDataRegistro()
                 ))
                 .collect(Collectors.toList());
 
-        // --- CORREÇÃO 2: Adicionado d.getDesenhoBase64() na lista de últimos ---
+        // Mantém todos os registros (incluindo desenhos) na lista de atividades recentes
         List<DiarioDTO> ultimosRegistros = diarios.stream()
                 .limit(5)
                 .map(d -> new DiarioDTO(
@@ -115,13 +126,13 @@ public class ResponsavelController {
                     d.getEmocao(), 
                     d.getIntensidade(), 
                     d.getRelato(), 
-                    d.getDesenhoBase64(), // <--- ADICIONADO AQUI TAMBÉM
+                    d.getDesenhoBase64(),
                     d.getDataRegistro()
                 ))
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(Map.of(
-            "totalRegistros", diarios.size(),
+            "totalRegistros", diarios.size(), 
             "historicoGrafico", historicoGrafico,
             "ultimosRegistros", ultimosRegistros
         ));
