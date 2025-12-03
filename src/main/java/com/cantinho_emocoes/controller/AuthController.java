@@ -140,4 +140,20 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+    
+    // --- 8. ATUALIZAR AVATAR (NOVO) ---
+    @PutMapping("/meu-perfil/avatar")
+    public ResponseEntity<?> updateAvatar(@AuthenticationPrincipal UserDetails userDetails, @RequestBody AvatarSelectionDTO avatarDTO) {
+        if (userDetails == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        
+        try {
+            usuarioService.atualizarAvatar(userDetails.getUsername(), avatarDTO.getAvatarUrl());
+            return ResponseEntity.ok(Map.of(
+                "message", "Avatar atualizado com sucesso!",
+                "avatarUrl", avatarDTO.getAvatarUrl()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Erro ao atualizar avatar."));
+        }
+    }
 }

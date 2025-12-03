@@ -1,6 +1,6 @@
 package com.cantinho_emocoes.service;
 
-import com.cantinho_emocoes.dto.AdminUsuarioDTO; // Import Novo
+import com.cantinho_emocoes.dto.AdminUsuarioDTO; 
 import com.cantinho_emocoes.dto.DependenteRequestDTO;
 import com.cantinho_emocoes.dto.PerfilDTO;
 import com.cantinho_emocoes.model.Perfil;
@@ -18,7 +18,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors; // Import Novo
+import java.util.stream.Collectors; 
 
 @Service
 public class UsuarioService {
@@ -135,26 +135,57 @@ public class UsuarioService {
         usuarioRepository.delete(responsavel);
     }
 
-    // --- NOVOS MÉTODOS PARA O ADMINISTRADOR ---
+    // --- NOVOS MÉTODOS PARA O ADMINISTRADOR (CORRIGIDOS) ---
 
     @Transactional(readOnly = true)
     public List<AdminUsuarioDTO> listarTodosUsuarios() {
-        return usuarioRepository.findAll().stream()
-                .map(u -> new AdminUsuarioDTO(
-                        u.getId(),
-                        u.getNome(),
-                        u.getEmail(),
-                        u.getPerfil(),
-                        u.getDataCadastro()
-                ))
+        // Busca todos os usuários do banco
+        List<Usuario> todos = usuarioRepository.findAll();
+        
+        // Filtra apenas quem NÃO tem responsável (ou seja, Pais e Admins)
+        // Isso evita que as crianças apareçam soltas na lista principal
+        return todos.stream()
+                .filter(u -> u.getResponsavel() == null) 
+                .map(this::converterParaAdminDTO)
                 .collect(Collectors.toList());
+    }
+
+    // Método auxiliar para converter e preencher os filhos recursivamente
+    private AdminUsuarioDTO converterParaAdminDTO(Usuario u) {
+        // Converte a lista de dependentes (filhos) para DTO também
+        List<AdminUsuarioDTO> filhosDTO = u.getDependentes().stream()
+                .map(this::converterParaAdminDTO) // Recursão simples
+                .collect(Collectors.toList());
+
+        return new AdminUsuarioDTO(
+                u.getId(),
+                u.getNome(),
+                u.getEmail(),
+                u.getPerfil(),
+                u.getDataCadastro(),
+                filhosDTO // Passa a lista de filhos para ficar aninhado
+        );
+    }
+    
+    @Transactional
+    public void atualizarAvatar(String email, String novaAvatarUrl) {
+        Usuario usuario = usuarioRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
+        
+        usuario.setAvatarUrl(novaAvatarUrl);
+        usuarioRepository.save(usuario);
     }
 
     @Transactional
     public void deletarUsuarioPeloAdmin(Long id) {
-        if (!usuarioRepository.existsById(id)) {
-            throw new UsernameNotFoundException("Usuário não encontrado com ID: " + id);
+        Usuario usuario = usuarioRepository.findById(id)
+            .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado com ID: " + id));
+
+        // --- TRAVA DE SEGURANÇA: Não permitir excluir contas de Administrador ---
+        if (usuario.getPerfil() == Perfil.ADMINISTRADOR) {
+            throw new RuntimeException("Não é permitido excluir contas de Administrador.");
         }
-        usuarioRepository.deleteById(id);
+
+        usuarioRepository.delete(usuario);
     }
 }
