@@ -1,9 +1,9 @@
 package com.cantinho_emocoes.service;
 
-// --- IMPORTS CORRIGIDOS ---
+import com.cantinho_emocoes.dto.AdminUsuarioDTO; // Import Novo
 import com.cantinho_emocoes.dto.DependenteRequestDTO;
 import com.cantinho_emocoes.dto.PerfilDTO;
-import com.cantinho_emocoes.model.Perfil; // Importante para Perfil.CRIANCA funcionar
+import com.cantinho_emocoes.model.Perfil;
 import com.cantinho_emocoes.model.Usuario;
 import com.cantinho_emocoes.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors; // Import Novo
 
 @Service
 public class UsuarioService {
@@ -61,7 +62,6 @@ public class UsuarioService {
         // Gera senha aleatória pois a criança usa o login do pai
         crianca.setSenha(passwordEncoder.encode(UUID.randomUUID().toString())); 
         
-        // AQUI ESTAVA O ERRO: Agora o Perfil.CRIANCA vai funcionar
         crianca.setPerfil(Perfil.CRIANCA);
         
         crianca.setAvatarUrl(dto.avatarUrl());
@@ -122,19 +122,39 @@ public class UsuarioService {
         usuario.setNome(novoNome);
         usuarioRepository.save(usuario);
     }
+
     @Transactional
     public void excluirContaFamilia(Usuario responsavel) {
-        // O CascadeType.ALL na entidade Usuario garante que ao deletar o pai,
-        // todos os filhos (dependentes) e dados vinculados sejam apagados.
         usuarioRepository.delete(responsavel);
     }
+
     @Transactional
     public void excluirContaFamilia(String email) {
         Usuario responsavel = usuarioRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado."));
-        
-        // O JPA vai cuidar de apagar os filhos se a entidade estiver configurada certa (Passo 3)
         usuarioRepository.delete(responsavel);
     }
 
+    // --- NOVOS MÉTODOS PARA O ADMINISTRADOR ---
+
+    @Transactional(readOnly = true)
+    public List<AdminUsuarioDTO> listarTodosUsuarios() {
+        return usuarioRepository.findAll().stream()
+                .map(u -> new AdminUsuarioDTO(
+                        u.getId(),
+                        u.getNome(),
+                        u.getEmail(),
+                        u.getPerfil(),
+                        u.getDataCadastro()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void deletarUsuarioPeloAdmin(Long id) {
+        if (!usuarioRepository.existsById(id)) {
+            throw new UsernameNotFoundException("Usuário não encontrado com ID: " + id);
+        }
+        usuarioRepository.deleteById(id);
+    }
 }

@@ -36,8 +36,11 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/auth/**", "/api/health", "/uploads/**").permitAll()
+                // --- NOVA REGRA PARA ADMINISTRADOR ---
+                .requestMatchers("/api/admin/**").hasRole("ADMINISTRADOR")
+                // -------------------------------------
                 .requestMatchers("/api/responsavel/**").hasRole("RESPONSAVEL")
-                .requestMatchers("/api/diario/**").authenticated() // Qualquer um logado pode acessar, o filtro valida o dono
+                .requestMatchers("/api/diario/**").authenticated() 
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider)
@@ -53,8 +56,6 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(List.of("http://localhost:5173"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         
-        // --- AQUI ESTÁ A CORREÇÃO DO SEU ERRO ---
-        // Adicionei "x-child-id" para o backend aceitar o cabeçalho que o Vue envia
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "x-auth-token", "x-child-id"));
         
         configuration.setAllowCredentials(true);
